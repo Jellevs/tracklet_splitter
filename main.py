@@ -38,6 +38,7 @@ def main(tracker_cfg, paths, device):
     # Predict attributes for each tracklet
     attributes_tracklets = predict_attributes(images, tracklets, paths, jersey_cfg, device)
 
+    # print(attributes_tracklets[4].to_dict())
     # Visualize tracklets
     visualize_tracklets(
         images,
@@ -78,6 +79,7 @@ if __name__ == "__main__":
         reid_model_path = WEIGHTS_ROOT / "jersey_weights" / "reid" / "osnet_x0_25_msmt17.pt",
         parseq_model_path = WEIGHTS_ROOT / "jersey_weights" / "parseq" / "parseq_epoch=24-step=2575-val_accuracy=95.6044-val_NED=96.3255.ckpt",
         centroid_reid_path = WEIGHTS_ROOT / "jersey_weights" / "centroid_reid" / "market1501_resnet50_256_128_epoch_120.ckpt",
+        siglip_model_path = 'google/siglip-base-patch16-224',
         sequence = SEQUENCE
     )
 

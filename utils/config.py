@@ -12,6 +12,7 @@ class Paths:
     reid_model_path: Path
     parseq_model_path: Path
     centroid_reid_path: Path
+    siglip_model_path: Path
     sequence: str
 
     def set_cache_path(self, name, sequence):

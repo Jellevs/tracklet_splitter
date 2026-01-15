@@ -54,6 +54,7 @@ def visualize_tracklets(images, tracklets_dict, output_path, title="tracklets", 
         labels = []
         for detection in detections_list:
 
+
             # Ground Truth attributes
             tracker_id = detection['tracker_id']
             parent_id = detection.get('parent_id')
@@ -77,7 +78,10 @@ def visualize_tracklets(images, tracklets_dict, output_path, title="tracklets", 
             pred_jersey_frame = detection.get('pred_jersey')
             pred_jersey_frame = str(pred_jersey_frame) if pred_jersey_frame is not None else "X"
 
-            label = f"{tracker_id}|{gt_jersey}|{gt_team}|{gt_role}:pred{pred_jersey_frame}"
+            pred_team_frame = detection.get('pred_team')
+            pred_team_frame = str(pred_team_frame) if pred_team_frame is not None else "X"
+
+            label = f"{tracker_id}|{gt_jersey}|{gt_team}|{gt_role}:pred{pred_jersey_frame}|{pred_team_frame}"
                                    
             labels.append(label)
 
@@ -143,20 +147,17 @@ def tracklets_to_frame_detections(tracklets_dict):
                 if not (isinstance(jersey, float) and np.isnan(jersey)):
                     detection_data['pred_jersey'] = int(jersey)
 
+
             # Team: use final team, otherwise per frame
             if tracklet.final_team is not None:
-                detection_data['team'] = tracklet.final_team
-            else:
-                teams = tracklet.pred_attributes.get('teams', [])
-                if teams is not None and len(teams) > 0 and i < len(teams):
-                    team = teams[i]
-                    if team != -1:
-                        detection_data['team'] = team
-                    else:
-                        detection_data['team'] = -1
-                else:
-                    detection_data['team'] = -1
+                detection_data['final_team'] = tracklet.final_team
             
+            teams = tracklet.pred_attributes.get('teams', [])
+            if teams is not None and len(teams) > 0 and i < len(teams):
+                team = teams[i]
+                if not np.isnan(team):
+                    detection_data['pred_team'] = int(team)
+
             
             frame_to_detections[frame_idx].append(detection_data)
 

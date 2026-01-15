@@ -1,3 +1,4 @@
+### ADD ONLY JERSEY PREDICTION ON GT ROLES FROM GK AND PLAYERS
 from pathlib import Path
 import torch
 import numpy as np
@@ -13,7 +14,6 @@ from .centroid_reid_filter import CentroidReIDFilter
 class JerseyNumberPredictorParseq:
     """ Mkoshkina's jersey number detection pipeline (https://github.com/mkoshkina/jersey-number-pipeline) """
     def __init__(self, paths, jersey_cfg, device='cpu'):
-        
         self.jersey_cfg = jersey_cfg
         self.device = device
         self.debug_dir = Path(jersey_cfg.debug_dir) if jersey_cfg.debug_dir else None
@@ -23,7 +23,7 @@ class JerseyNumberPredictorParseq:
 
         self.legibility_predictor = self.load_legibility_model(paths.legibility_model_path) if jersey_cfg.use_legibility else None
         self.pose_cropper = self.load_pose_cropper_model() if jersey_cfg.use_pose_cropper else None
-        self.reid_filter = self.load_reid_filter_model() if jersey_cfg.use_reid_filter else None
+        self.reid_filter = self.load_reid_filter_model(paths.centroid_reid_path) if jersey_cfg.use_reid_filter else None
 
 
     def predict(self, images, tracklet):
@@ -32,10 +32,10 @@ class JerseyNumberPredictorParseq:
         
         full_crops, torso_crops, indices = self.extract_crops(images, tracklet)
 
-
         if not full_crops:
             return np.full(num_frames, np.nan), np.zeros(num_frames)
         
+
         # Stage 1: ReID outlier filtering
         if self.reid_filter and tracklet.embeddings:
             embeddings = [tracklet.embeddings[i] for i in indices]
@@ -43,14 +43,17 @@ class JerseyNumberPredictorParseq:
             [full_crops, torso_crops], indices = self.reid_filter.filter(
                 [full_crops, torso_crops], indices, embeddings
             )
+
+        full_crops_teams_with_outlier_filter = full_crops.copy()        
+
                 
         # Stage 2: Legibility filtering
         if self.legibility_predictor and full_crops:
             legibility_flags, legibility_confs = self.legibility_predictor.predict_batch(full_crops)
 
             # Enable for legibility debug
-            if self.debug_dir and self.jersey_cfg.debug_tracklet_id == tracklet.parent_id:
-                self.save_legibility_debug(tracklet, full_crops,  indices, legibility_flags)
+            # if self.debug_dir and self.jersey_cfg.debug_tracklet_id == tracklet.parent_id:
+            #     self.save_legibility_debug(tracklet, full_crops,  indices, legibility_flags)
 
             [full_crops, torso_crops], indices = self.legibility_predictor.filter(
                 [full_crops, torso_crops], indices
@@ -62,7 +65,9 @@ class JerseyNumberPredictorParseq:
         else:
             predictions, confidences = [], []
         
-        return self.map_to_frames(predictions, confidences, indices, num_frames)
+        jerseys, confs = self.map_to_frames(predictions, confidences, indices, num_frames)
+
+        return full_crops_teams_with_outlier_filter, jerseys, confs
 
 
     def extract_crops(self, images, tracklet):
@@ -73,6 +78,11 @@ class JerseyNumberPredictorParseq:
         indices = []
 
         for i, (frame_idx, bbox) in enumerate(zip(tracklet.frames, tracklet.bboxes)):
+
+            # Only extract crops from goalkeepers and players
+            # if tracklet.gt_attributes['roles'][i] == "referee":
+            #     continue
+
             image = cv2.imread(str(images[frame_idx]))
 
             x1, y1, x2, y2 = map(int, bbox)
@@ -134,11 +144,11 @@ class JerseyNumberPredictorParseq:
         )
 
     
-    def load_reid_filter_model(self):
+    def load_reid_filter_model(self, centroid_reid_path):
         return CentroidReIDFilter(
-            checkpoint_path=r"C:\Users\jelle\Documents\TUEindhoven\Master\Thesis\development\post_processing_from_scratch\models\market1501_resnet50_256_128_epoch_120.ckpt",
+            checkpoint_path=centroid_reid_path,
             threshold_std=self.jersey_cfg.reid_threshold_std,
-            rounds=3,
+            rounds=5,
             min_samples=3
         )
     
@@ -191,51 +201,46 @@ class JerseyNumberPredictorParseq:
         return crop[int(h * 0.2):int(h * 0.8), :, :]
 
 
-    def save_reid_debug(self, tracklet, original_crops, original_indices, kept_indices, reid_stats):
-        """ Save legible and illegible crops for debugging """
+    def save_crops(self, crops):
+        import os
+        output_dir = r"C:\Users\jelle\Documents\TUEindhoven\Master\Thesis\development\tracklet_splitter_scratch\output\debug\reid"
         
-        debug_path = self.debug_dir / f"tracklet_{tracklet.track_id}_reid"
-        debug_path.mkdir(parents=True, exist_ok=True)
-        
-        # Create a set for fast lookup
-        kept_indices_set = set(kept_indices)
-        
-        total_crops = len(original_crops)
-        kept_count = len(kept_indices)
-        removed_count = total_crops - kept_count
-        
-        print(f"   Kept: {kept_count} ({100*kept_count/total_crops:.1f}%)")
-        print(f"   Removed: {removed_count} ({100*removed_count/total_crops:.1f}%)")
-        
-        # Save each crop with colored border
-        for idx, (crop, frame_idx) in enumerate(zip(original_crops, original_indices)):
-            is_kept = frame_idx in kept_indices_set
+        if not os.path.exists(output_dir):
+            os.makedirs(output_dir)
+            print(f"Created directory: {output_dir}")
+
+        for i, crop in enumerate(crops):
+            if crop.size == 0:
+                continue
+
+            filename = f"crop_{i}.jpg"
+            file_path = os.path.join(output_dir, filename)
+            crop_bgr = cv2.cvtColor(crop, cv2.COLOR_RGB2BGR)
+            # 4. Save the image
+            cv2.imwrite(file_path, crop_bgr)
             
-            # Create a copy with border
-            crop_with_border = crop.copy()
-            
-            # Add colored border (green=kept, red=removed)
-            border_color = (0, 255, 0) if is_kept else (255, 0, 0)  # RGB
-            border_thickness = 5
-            
-            h, w = crop_with_border.shape[:2]
-            crop_with_border = cv2.copyMakeBorder(
-                crop_with_border,
-                border_thickness, border_thickness,
-                border_thickness, border_thickness,
-                cv2.BORDER_CONSTANT,
-                value=border_color
-            )
-            
-            # Save with frame number
-            actual_frame = tracklet.frames[frame_idx]
-            filename = f"frame_{actual_frame:04d}_idx_{idx:03d}_{'kept' if is_kept else 'outlier'}.png"
-            
-            # Convert RGB to BGR for saving
-            crop_bgr = cv2.cvtColor(crop_with_border, cv2.COLOR_RGB2BGR)
-            cv2.imwrite(str(debug_path / filename), crop_bgr)
+        print(f"Saved {len(crops)} images to {output_dir}")
+
+
+    def save_reid_crops(self, crops):
+        import os
+        output_dir = r"C:\Users\jelle\Documents\TUEindhoven\Master\Thesis\development\tracklet_splitter_scratch\output\debug\reid_filtered_centroids_real"
         
-        print(f"✅ Saved {len(original_crops)} debug images")
+        if not os.path.exists(output_dir):
+            os.makedirs(output_dir)
+            print(f"Created directory: {output_dir}")
+
+        for i, crop in enumerate(crops):
+            if crop.size == 0:
+                continue
+
+            filename = f"crop_{i}.jpg"
+            file_path = os.path.join(output_dir, filename)
+            crop_bgr = cv2.cvtColor(crop, cv2.COLOR_RGB2BGR)
+            # 4. Save the image
+            cv2.imwrite(file_path, crop_bgr)
+            
+        print(f"Saved {len(crops)} images to {output_dir}")
 
 
     def save_legibility_debug(self, tracklet, full_crops, indices, legibility_flags):

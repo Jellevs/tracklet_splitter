@@ -53,7 +53,7 @@ from config import cfg
 class CentroidReIDFilter:
     """ ReID-based outlier filter using Centroid-ReID """
     
-    def __init__(self, checkpoint_path, threshold_std=3.5, rounds=3, min_samples=3, device='cuda'):
+    def __init__(self, checkpoint_path, threshold_std=3.5, rounds=5, min_samples=3, device='cuda'):
         self.threshold_std = threshold_std
         self.rounds = rounds
         self.min_samples = min_samples
@@ -276,3 +276,5 @@ class CentroidReIDFilter:
         stats['removal_rate'] = stats['total_removed'] / len(embeddings)
         
         return stats
+
+
