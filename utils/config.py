@@ -46,15 +46,21 @@ class JerseyPredictorConfig:
     debug_dir: Path = None
 
 
-@dataclass 
+@dataclass
 class SplitterConfig:
     """Configuration for tracklet splitting."""
-    
+
     # Jersey splitter (frame-by-frame with persistence)
     jersey_min_fragment: int = 20   # Minimum frames for a valid fragment
-    jersey_min_persistence: int = 3  # New number must appear 3+ times to confirm switch
+    jersey_min_persistence: int = 5  # New number must appear 3+ times to confirm switch
     jersey_lookahead: int = 20       # Look ahead 20 frames to check persistence
-    
+
+    # Trajectory refinement
+    use_trajectory_refinement: bool = True
+    jersey_backtrack_window: int = 50    # How far back to look for trajectory signals
+    velocity_jump_threshold: float = 2.0  # Multiplier for velocity change detection
+    direction_change_threshold: float = 90  # Degrees for direction change
+
     # Team splitter (for later)
     team_window_size: int = 15
     team_min_fragment: int = 20

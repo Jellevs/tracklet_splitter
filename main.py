@@ -4,7 +4,7 @@ from utils.visualization_utils import visualize_tracklets
 from detect_and_track.detect_and_track import detect_and_track
 from detect_and_track.trackers.Deep_EIoU import DeepEIOUTracker
 from attributes.attributes import predict_attributes
-# from tracklets.split_tracklets import split_tracklets
+from tracklets.split_tracklets import split_tracklets
 
 import torch
 from pathlib import Path
@@ -41,13 +41,13 @@ def main(tracker_cfg, paths, device):
     attributes_tracklets = predict_attributes(images, tracklets, paths, jersey_cfg, device)
 
     # Split tracklets
-    # splitted_tracklets = split_tracklets(attributes_tracklets, splitter_cfg)
+    splitted_tracklets = split_tracklets(attributes_tracklets, splitter_cfg)
 
     # Visualize tracklets
     visualize_tracklets(
         images,
-        attributes_tracklets,
-        paths.output_path / "videos" / f"{SEQUENCE}_split_jersey.mp4",
+        splitted_tracklets,
+        paths.output_path / "videos" / f"{SEQUENCE}_splitt_jersey.mp4",
         title="PARSeq Jersey Detection",
     )
 
