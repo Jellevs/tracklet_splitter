@@ -1,88 +1,128 @@
 from tqdm import tqdm
 import pickle
-import cv2
 import numpy as np
+from collections import Counter
 
 from .jersey_number.jersey_number_predictor_parseq import JerseyNumberPredictorParseq
 from .teamclassifier import TeamClassifier
 
 
 def predict_attributes(images, tracklets, paths, jersey_cfg, device):
+    """ Predict jersey numbers and team assignments for all tracklets """
     cache_path = paths.set_cache_path("attributes", paths.sequence)
 
-    # Check cache
     if cache_path and cache_path.exists():
-        with  open(cache_path, 'rb') as f:
+        print(f"Loading cached attributes from {cache_path}")
+        with open(cache_path, 'rb') as f:
             return pickle.load(f)
-    else:
-
-        jersey_predictor = JerseyNumberPredictorParseq(
-            paths=paths,
-            jersey_cfg=jersey_cfg,
-            device=device
-        )
-
-        team_classifier = TeamClassifier(
-            device=device,
-            batch_size=32,
-            paths=paths
-        )
 
 
-        tracklet_crops = {}
-        player_crops = []
-        for track_id, tracklet in tqdm(tracklets.items()):
-            full_crops, jerseys, jersey_confs = jersey_predictor.predict(images, tracklet)
+    jersey_predictor = JerseyNumberPredictorParseq(
+        paths=paths,
+        jersey_cfg=jersey_cfg,
+        device=device
+    )
 
-            tracklet.pred_attributes['jerseys'] = jerseys.tolist()
-            tracklet.pred_attributes['jersey_confs'] = jersey_confs.tolist()
+    team_classifier = TeamClassifier(
+        device=device,
+        batch_size=32,
+        paths=paths
+    )
 
-            # Store all crops for team classification
-            tracklet_crops[track_id] = full_crops
-            roles = tracklet.gt_attributes.get('roles', [])
-            for crop_idx, crop in enumerate(full_crops):
-                if roles[crop_idx] == "player":
-                    player_crops.append(crop)
 
-        team_classifier.fit(player_crops)
+    # Phase 1: Extract crops and predict jersey numbers
+    print("Phase 1: Extracting crops and predicting jersey numbers...")
+    
+    tracklet_torso_crops = {}
+    tracklet_crop_indices = {}
+    tracklet_crop_roles = {}
+    
+    all_torso_crops = []
+    all_crop_info = []
+    player_mask = []
+    gt_teams = []
+    
+    for track_id, tracklet in tqdm(tracklets.items(), desc="Processing tracklets"):
+        # Get unfiltered torso crops for teams + filtered jersey predictions
+        torso_crops, indices, jerseys, jersey_confs = jersey_predictor.predict(images, tracklet)
 
-        for track_id, tracklet in tqdm(tracklets.items()):
-            full_crops = tracklet_crops[track_id]
-            team_predictions = team_classifier.predict(full_crops)
-            tracklet.pred_attributes['teams'] = team_predictions.tolist()
+        # Store jersey predictions
+        tracklet.pred_attributes['jerseys'] = jerseys.tolist()
+        tracklet.pred_attributes['jersey_confs'] = jersey_confs.tolist()
 
-            if track_id == 16:
-                save_crops(full_crops)
-
-        print("team prediction finished")
+        # Store torso crops for team classification
+        tracklet_torso_crops[track_id] = torso_crops
+        tracklet_crop_indices[track_id] = indices
+        
+        roles = tracklet.gt_attributes.get('roles', [])
+        teams = tracklet.gt_attributes.get('teams', [])
+        
+        # Build crop info for team classification
+        crop_roles = []
+        for i, crop in enumerate(torso_crops):
+            tracklet_idx = indices[i]
             
+            # Get role for this crop
+            role = roles[tracklet_idx] if tracklet_idx < len(roles) else "unknown"
+            crop_roles.append(role)
+            
+            all_torso_crops.append(crop)
+            all_crop_info.append((track_id, i))
+            
+            # Only players should be used for clustering (not GK/referee)
+            is_player = (role == "player")
+            player_mask.append(is_player)
+            
+            # Store GT team for evaluation
+            gt_team = teams[tracklet_idx] if tracklet_idx < len(teams) else "unknown"
+            gt_teams.append(gt_team)
+        
+        tracklet_crop_roles[track_id] = crop_roles
 
 
+    # Phase 2: Team classification using torso crops
+    player_mask = np.array(player_mask)
+    
+    # Run team classification on torso crops
+    all_predictions = team_classifier.fit_predict_all(all_torso_crops, player_mask)
+    
+
+    # Phase 3: Map predictions back to tracklets
+    # Only assign teams to PLAYERS (not referees or goalkeepers)
+    print("Phase 3: Mapping predictions to tracklets...")
+    
+    prediction_lookup = {}
+    for global_idx, (track_id, local_idx) in enumerate(all_crop_info):
+        prediction_lookup[(track_id, local_idx)] = all_predictions[global_idx]
+    
+    for track_id, tracklet in tracklets.items():
+        indices = tracklet_crop_indices[track_id]
+        crop_roles = tracklet_crop_roles[track_id]
+        num_frames = len(tracklet.frames)
+        teams_full = [np.nan] * num_frames
+        
+        n_crops = len(tracklet_torso_crops[track_id])
+        for local_idx in range(n_crops):
+            # Only assign team to players, skip referees and goalkeepers
+            role = crop_roles[local_idx]
+            if role != "player":
+                continue  # Leave as np.nan for non-players
+            
+            pred = prediction_lookup.get((track_id, local_idx))
+            if pred is not None:
+                tracklet_idx = indices[local_idx]
+                teams_full[tracklet_idx] = pred
+        
+        tracklet.pred_attributes['teams'] = teams_full
+
+    print("Attribute prediction finished!")
+
+
+    # Save cache
     if cache_path:
         cache_path.parent.mkdir(parents=True, exist_ok=True)
         with open(cache_path, 'wb') as f:
             pickle.dump(tracklets, f)
+        print(f"Cached attributes to {cache_path}")
 
     return tracklets
-
-
-
-def save_crops(crops):
-    import os
-    output_dir = r"C:\Users\jelle\Documents\TUEindhoven\Master\Thesis\development\tracklet_splitter_scratch\output\debug\reid_16"
-    
-    if not os.path.exists(output_dir):
-        os.makedirs(output_dir)
-        print(f"Created directory: {output_dir}")
-
-    for i, crop in enumerate(crops):
-        if crop.size == 0:
-            continue
-
-        filename = f"crop_{i}.jpg"
-        file_path = os.path.join(output_dir, filename)
-        crop_bgr = cv2.cvtColor(crop, cv2.COLOR_RGB2BGR)
-        # 4. Save the image
-        cv2.imwrite(file_path, crop_bgr)
-        
-    print(f"Saved {len(crops)} images to {output_dir}")

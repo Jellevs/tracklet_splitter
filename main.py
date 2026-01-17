@@ -1,9 +1,10 @@
 from utils.data_utils import load_images, organize_detections_by_track
-from utils.config import Paths, TrackerConfig, JerseyPredictorConfig
-from utils.visualization_utils import visualize_tracklets
+from utils.config import Paths, TrackerConfig, JerseyPredictorConfig, SplitterConfig
+from utils.visualization_utils import visualize_tracklets 
 from detect_and_track.detect_and_track import detect_and_track
 from detect_and_track.trackers.Deep_EIoU import DeepEIOUTracker
 from attributes.attributes import predict_attributes
+# from tracklets.split_tracklets import split_tracklets
 
 import torch
 from pathlib import Path
@@ -35,15 +36,18 @@ def main(tracker_cfg, paths, device):
     # Organize detections by frame into tracklets
     tracklets = organize_detections_by_track(tracked_detections)
 
+
     # Predict attributes for each tracklet
     attributes_tracklets = predict_attributes(images, tracklets, paths, jersey_cfg, device)
 
-    # print(attributes_tracklets[4].to_dict())
+    # Split tracklets
+    # splitted_tracklets = split_tracklets(attributes_tracklets, splitter_cfg)
+
     # Visualize tracklets
     visualize_tracklets(
         images,
         attributes_tracklets,
-        paths.output_path / "videos" / f"{SEQUENCE}_parseq.mp4",
+        paths.output_path / "videos" / f"{SEQUENCE}_split_jersey.mp4",
         title="PARSeq Jersey Detection",
     )
 
@@ -64,7 +68,7 @@ if __name__ == "__main__":
 
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     
-    SEQUENCE = "SNGS-127"
+    SEQUENCE = "SNGS-123"
     DATA_ROOT = Path(r"C:\Users\jelle\Documents\TUEindhoven\Master\Thesis\development\data\soccernet\data\SoccerNetGS\test")
     OUTPUT_ROOT = Path(r"C:\Users\jelle\Documents\TUEindhoven\Master\Thesis\development\tracklet_splitter_scratch\output")
     WEIGHTS_ROOT = Path(r"C:\Users\jelle\Documents\TUEindhoven\Master\Thesis\development\tracklet_splitter_scratch\weights")
@@ -79,7 +83,8 @@ if __name__ == "__main__":
         reid_model_path = WEIGHTS_ROOT / "jersey_weights" / "reid" / "osnet_x0_25_msmt17.pt",
         parseq_model_path = WEIGHTS_ROOT / "jersey_weights" / "parseq" / "parseq_epoch=24-step=2575-val_accuracy=95.6044-val_NED=96.3255.ckpt",
         centroid_reid_path = WEIGHTS_ROOT / "jersey_weights" / "centroid_reid" / "market1501_resnet50_256_128_epoch_120.ckpt",
-        siglip_model_path = 'google/siglip-base-patch16-224',
+        siglip_model_path = WEIGHTS_ROOT / "team_weights" / "siglip",        
+        vitpose_model_path = WEIGHTS_ROOT / "jersey_weights" / "vitpose",
         sequence = SEQUENCE
     )
 
@@ -94,5 +99,7 @@ if __name__ == "__main__":
         debug_dir=r"C:\Users\jelle\Documents\TUEindhoven\Master\Thesis\development\tracklet_splitter_scratch\output\debug"
     )
 
+    splitter_cfg = SplitterConfig(
+    )
 
     main(tracker_cfg, paths, device)

@@ -13,6 +13,7 @@ class Paths:
     parseq_model_path: Path
     centroid_reid_path: Path
     siglip_model_path: Path
+    vitpose_model_path: Path
     sequence: str
 
     def set_cache_path(self, name, sequence):
@@ -43,3 +44,19 @@ class JerseyPredictorConfig:
     reid_threshold_std: float = 2.0
     debug_tracklet_id: int = None
     debug_dir: Path = None
+
+
+@dataclass 
+class SplitterConfig:
+    """Configuration for tracklet splitting."""
+    
+    # Jersey splitter (frame-by-frame with persistence)
+    jersey_min_fragment: int = 20   # Minimum frames for a valid fragment
+    jersey_min_persistence: int = 3  # New number must appear 3+ times to confirm switch
+    jersey_lookahead: int = 20       # Look ahead 20 frames to check persistence
+    
+    # Team splitter (for later)
+    team_window_size: int = 15
+    team_min_fragment: int = 20
+    team_switch_threshold: float = 0.6
+    team_switch_distance: int = 10
