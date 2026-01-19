@@ -1,5 +1,4 @@
 import torch
-import numpy as np
 import cv2
 from PIL import Image
 from transformers import VitPoseForPoseEstimation, AutoProcessor
@@ -12,18 +11,13 @@ RIGHT_HIP = 12
 
 
 class PoseCropper:
-    """Pose-based torso cropping using ViTPose."""
+    """ Pose-based torso cropping using ViTPose from huggingface instead of MMPose because of import/version problems"""
     
     def __init__(self, device='cuda', model_path='usyd-community/vitpose-base-simple'):
-        """
-        Args:
-            device: 'cuda' or 'cpu'
-            model_path: HuggingFace model name OR local path to saved model
-        """
         self.device = torch.device(device if torch.cuda.is_available() else 'cpu')
         
         # Check if local path or HuggingFace model name
-        local_only = self._is_local_path(model_path)
+        local_only = self.is_local_path(model_path)
 
         self.processor = AutoProcessor.from_pretrained(model_path, local_files_only=local_only)
         self.model = VitPoseForPoseEstimation.from_pretrained(model_path, local_files_only=local_only)
@@ -41,14 +35,14 @@ class PoseCropper:
     
     
     @staticmethod
-    def _is_local_path(path):
-        """Check if path is a local directory (not a HuggingFace model name)."""
+    def is_local_path(path):
+        """ Check if path is a local directory (not a HuggingFace model name) """
         import os
         return os.path.isdir(path)
 
 
     def get_torso_crop(self, image, bbox, return_keypoints=False):
-        """Extract torso crop from image using pose estimation"""
+        """ Extract torso crop from image using pose estimation """
 
         x1, y1, x2, y2 = map(int, bbox)
 
@@ -92,7 +86,7 @@ class PoseCropper:
     
 
     def detect_pose(self, pil_image):
-        """Run ViTPose on a single PIL image"""
+        """ Run ViTPose on a single PIL image """
 
         width, height = pil_image.size
         boxes = [[[0, 0, width, height]]]
@@ -124,7 +118,7 @@ class PoseCropper:
             
 
     def get_torso_bbox(self, keypoints, scores, crop_shape):
-        """Get torso bounding box from keypoints"""
+        """ Get torso bounding box from keypoints """
         h, w = crop_shape[:2]
         
         left_shoulder = keypoints[LEFT_SHOULDER]

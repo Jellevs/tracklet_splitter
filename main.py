@@ -40,14 +40,16 @@ def main(tracker_cfg, paths, device):
     # Predict attributes for each tracklet
     attributes_tracklets = predict_attributes(images, tracklets, paths, jersey_cfg, device)
 
+
     # Split tracklets
     splitted_tracklets = split_tracklets(attributes_tracklets, splitter_cfg)
+
 
     # Visualize tracklets
     visualize_tracklets(
         images,
         splitted_tracklets,
-        paths.output_path / "videos" / f"{SEQUENCE}_splitt_jersey.mp4",
+        paths.output_path / "videos" / f"{SEQUENCE}_jersey_team_splitter.mp4",
         title="PARSeq Jersey Detection",
     )
 

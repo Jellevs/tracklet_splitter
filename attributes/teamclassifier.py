@@ -75,7 +75,7 @@ class TeamClassifier:
         cluster_model = KMeans(n_clusters=2, random_state=42, n_init=10)
         cluster_model.fit(player_projections)
         
-        # Predict on ALL projections
+        # Predict on ALL projections and filter non  players out later
         predictions = cluster_model.predict(all_projections)
         
         return predictions

@@ -2,7 +2,6 @@ import cv2
 import supervision as sv
 import numpy as np 
 from tqdm import tqdm
-from collections import Counter
 
 
 def visualize_tracklets(images, tracklets_dict, output_path, title="tracklets"):
@@ -69,8 +68,11 @@ def visualize_tracklets(images, tracklets_dict, output_path, title="tracklets"):
             
             pred_team_frame = detection.get('pred_team')
             pred_team_frame = str(pred_team_frame) if pred_team_frame is not None else "X"
+
+            pred_team_confidence = detection.get('jersey_entropies')
+            pred_team_confidence = str(pred_team_confidence) if pred_team_confidence is not None else "X"
             
-            label = f"{tracker_id}|{pred_jersey_frame}|{pred_team_frame}"
+            label = f"{tracker_id}|{pred_team_frame}|{pred_jersey_frame}:{pred_team_confidence}"
                                    
             labels.append(label)
 
@@ -123,10 +125,13 @@ def tracklets_to_frame_detections(tracklets_dict):
 
             # Per-frame predictions
             jerseys = tracklet.pred_attributes.get('jerseys', [])
+            entropies = tracklet.pred_attributes.get('jersey_entropies', [])
             if jerseys is not None and len(jerseys) > 0 and i < len(jerseys):
                 jersey = jerseys[i]
+                entropy = entropies[i]
                 if not (isinstance(jersey, float) and np.isnan(jersey)):
                     detection_data['pred_jersey'] = int(jersey)
+                    detection_data['pred_jersey_entropies'] = float(entropy)
 
             teams = tracklet.pred_attributes.get('teams', [])
             if teams is not None and len(teams) > 0 and i < len(teams):
@@ -134,7 +139,6 @@ def tracklets_to_frame_detections(tracklets_dict):
                 if not (isinstance(team, float) and np.isnan(team)):
                     detection_data['pred_team'] = int(team)
             
-
             
             frame_to_detections[frame_idx].append(detection_data)
 

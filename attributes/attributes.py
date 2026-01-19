@@ -1,14 +1,13 @@
 from tqdm import tqdm
 import pickle
 import numpy as np
-from collections import Counter
 
 from .jersey_number.jersey_number_predictor_parseq import JerseyNumberPredictorParseq
 from .teamclassifier import TeamClassifier
 
 
 def predict_attributes(images, tracklets, paths, jersey_cfg, device):
-    """ Predict jersey numbers and team assignments for all tracklets """
+    """ Predict jersey numbers and team id for all tracklets """
     cache_path = paths.set_cache_path("attributes", paths.sequence)
 
     if cache_path and cache_path.exists():
@@ -44,11 +43,12 @@ def predict_attributes(images, tracklets, paths, jersey_cfg, device):
     
     for track_id, tracklet in tqdm(tracklets.items(), desc="Processing tracklets"):
         # Get unfiltered torso crops for teams + filtered jersey predictions
-        torso_crops, indices, jerseys, jersey_confs = jersey_predictor.predict(images, tracklet)
+        torso_crops, indices, jerseys, jersey_confs_mean, jersey_entropies = jersey_predictor.predict(images, tracklet)
 
         # Store jersey predictions
         tracklet.pred_attributes['jerseys'] = jerseys.tolist()
-        tracklet.pred_attributes['jersey_confs'] = jersey_confs.tolist()
+        tracklet.pred_attributes['jersey_confs_mean'] = jersey_confs_mean.tolist()
+        tracklet.pred_attributes['jersey_entropies'] = jersey_entropies.tolist()
 
         # Store torso crops for team classification
         tracklet_torso_crops[track_id] = torso_crops
@@ -82,10 +82,9 @@ def predict_attributes(images, tracklets, paths, jersey_cfg, device):
 
     # Phase 2: Team classification using torso crops
     player_mask = np.array(player_mask)
+    team_predictions = team_classifier.fit_predict_all(all_torso_crops, player_mask)
     
-    # Run team classification on torso crops
-    all_predictions = team_classifier.fit_predict_all(all_torso_crops, player_mask)
-    
+
 
     # Phase 3: Map predictions back to tracklets
     # Only assign teams to PLAYERS (not referees or goalkeepers)
@@ -93,12 +92,13 @@ def predict_attributes(images, tracklets, paths, jersey_cfg, device):
     
     prediction_lookup = {}
     for global_idx, (track_id, local_idx) in enumerate(all_crop_info):
-        prediction_lookup[(track_id, local_idx)] = all_predictions[global_idx]
+        prediction_lookup[(track_id, local_idx)] = team_predictions[global_idx]
     
     for track_id, tracklet in tracklets.items():
         indices = tracklet_crop_indices[track_id]
         crop_roles = tracklet_crop_roles[track_id]
         num_frames = len(tracklet.frames)
+
         teams_full = [np.nan] * num_frames
         
         n_crops = len(tracklet_torso_crops[track_id])
