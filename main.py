@@ -95,7 +95,7 @@ if __name__ == "__main__":
         use_reid_filter = True,
         use_pose_cropper = True,
         legibility_arch = "resnet34",
-        legibility_threshold = 0.8,
+        legibility_threshold = 0.6,
         reid_threshold_std = 0.5,
         debug_tracklet_id = 1,
         debug_dir=r"C:\Users\jelle\Documents\TUEindhoven\Master\Thesis\development\tracklet_splitter_scratch\output\debug"

@@ -69,8 +69,8 @@ def visualize_tracklets(images, tracklets_dict, output_path, title="tracklets"):
             pred_team_frame = detection.get('pred_team')
             pred_team_frame = str(pred_team_frame) if pred_team_frame is not None else "X"
 
-            pred_team_confidence = detection.get('jersey_entropies')
-            pred_team_confidence = str(pred_team_confidence) if pred_team_confidence is not None else "X"
+            pred_team_confidence = detection.get('pred_jersey_entropies')
+            pred_team_confidence = f"{pred_team_confidence:.4g}" if pred_team_confidence is not None else "X"
             
             label = f"{tracker_id}|{pred_team_frame}|{pred_jersey_frame}:{pred_team_confidence}"
                                    
